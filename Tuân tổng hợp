@@ -1,0 +1,680 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Tải thư viện Rayfield an toàn
+local okRayfield, Rayfield = pcall(function()
+	return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+end)
+
+if not okRayfield or not Rayfield then
+	warn("[TUÂN RAYFIELD V4] Không thể tải thư viện Rayfield.")
+	return
+end
+
+local Window = Rayfield:CreateWindow({
+	Name = "TUÂN RAYFIELD V4 | BY THIỆT",
+	Icon = 0,
+	LoadingTitle = "TUÂN RAYFIELD V4",
+	LoadingSubtitle = "BY THIỆT - Rainbow Edition",
+	Theme = "Default",
+	DisableRayfieldPrompts = false,
+	DisableBuildWarnings = false,
+	ConfigurationSaving = {
+		Enabled = true,
+		FolderName = "TuanRayfieldV4_AllInOne",
+		FileName = "Config"
+	},
+	Discord = {
+		Enabled = false,
+		Invite = "noinvitelink",
+		RememberJoins = true
+	},
+	KeySystem = false
+})
+
+-- ==================== MÀU CẦU VỒNG CHUNG ====================
+local rainbowColor = Color3.fromHSV(0, 1, 1)
+local rainbowEnabled = true
+
+task.spawn(function()
+	local hue = 0
+	while true do
+		if rainbowEnabled then
+			hue = (hue + 0.004) % 1
+			rainbowColor = Color3.fromHSV(hue, 1, 1)
+		end
+		RunService.RenderStepped:Wait()
+	end
+end)
+
+-- ==================== BIẾN TRẠNG THÁI ====================
+local walkSpeedEnabled = false
+local targetWalkSpeed = 16
+local jumpPowerEnabled = false
+local targetJumpPower = 50
+local prinkEnabled = false
+
+local noclipEnabled = false
+local savedCollisions = {}
+
+local flyEnabled = false
+local flySpeed = 50
+local flyBodyGyro = nil
+local flyBodyVelocity = nil
+
+local aimbotEnabled = false
+local aimPartChoice = "Head"
+local aimSmoothness = 0.25
+local fovEnabled = true
+local fovRadius = 120
+local wallCheckEnabled = true
+local teamCheckEnabled = true
+
+local espEnabled = false
+local enemyOnly = false
+local friendColor = Color3.fromRGB(0, 170, 255)
+
+-- ==================== HÀM HỖ TRỢ ====================
+local function getHumanoid(char)
+	if not char then
+		return nil
+	end
+	return char:FindFirstChildWhichIsA("Humanoid")
+end
+
+local function isTeammate(target)
+	if not LocalPlayer or not target or target == LocalPlayer then
+		return false
+	end
+	if LocalPlayer.Neutral or target.Neutral then
+		return false
+	end
+	if LocalPlayer.Team ~= nil and target.Team ~= nil then
+		return LocalPlayer.Team == target.Team
+	end
+	return LocalPlayer.TeamColor == target.TeamColor
+end
+
+local function resolveAimPart(char, choice)
+	if not char then
+		return nil
+	end
+	if choice == "Head" then
+		return char:FindFirstChild("Head")
+	elseif choice == "HumanoidRootPart" then
+		return char:FindFirstChild("HumanoidRootPart")
+	elseif choice == "Torso" then
+		return char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
+	elseif choice == "Left Arm" then
+		return char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("LeftHand")
+	elseif choice == "Right Arm" then
+		return char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm") or char:FindFirstChild("RightHand")
+	elseif choice == "Left Leg" then
+		return char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("LeftFoot")
+	elseif choice == "Right Leg" then
+		return char:FindFirstChild("Right Leg") or char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("RightFoot")
+	end
+	return char:FindFirstChild(choice) or char:FindFirstChild("Head")
+end
+
+local function isVisible(part)
+	if not wallCheckEnabled then
+		return true
+	end
+	if not part then
+		return false
+	end
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return false
+	end
+
+	local origin = cam.CFrame.Position
+	local direction = part.Position - origin
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+
+	local ignoreList = {}
+	if LocalPlayer.Character then
+		table.insert(ignoreList, LocalPlayer.Character)
+	end
+	if part.Parent then
+		table.insert(ignoreList, part.Parent)
+	end
+
+	params.FilterDescendantsInstances = ignoreList
+	params.IgnoreWater = true
+
+	local result = workspace:Raycast(origin, direction, params)
+	return result == nil
+end
+
+-- ==================== TAB CƠ BẢN & NHÂN VẬT ====================
+local CharTab = Window:CreateTab("Cơ Bản & Nhân Vật", 4483362458)
+CharTab:CreateSection("Hệ Thống & Nhân Vật")
+
+CharTab:CreateToggle({
+	Name = "Hiệu Ứng Màu Cầu Vồng",
+	CurrentValue = true,
+	Flag = "RainbowToggle",
+	Callback = function(Value)
+		rainbowEnabled = Value
+	end,
+})
+
+CharTab:CreateButton({
+	Name = "Reset Nhân Vật",
+	Callback = function()
+		local hum = getHumanoid(LocalPlayer.Character)
+		if hum then
+			hum.Health = 0
+		end
+	end,
+})
+
+CharTab:CreateSection("Walk Speed & Jump Power")
+
+CharTab:CreateToggle({
+	Name = "Bật Walk Speed",
+	CurrentValue = false,
+	Flag = "WalkSpeedToggle",
+	Callback = function(Value)
+		walkSpeedEnabled = Value
+		local hum = getHumanoid(LocalPlayer.Character)
+		if hum and not Value then
+			hum.WalkSpeed = 16
+		end
+	end,
+})
+
+CharTab:CreateSlider({
+	Name = "Walk Speed",
+	Range = {16, 250},
+	Increment = 1,
+	Suffix = " WS",
+	CurrentValue = 16,
+	Flag = "WalkSpeedSlider",
+	Callback = function(Value)
+		targetWalkSpeed = Value
+	end,
+})
+
+CharTab:CreateToggle({
+	Name = "Bật Jump Power",
+	CurrentValue = false,
+	Flag = "JumpPowerToggle",
+	Callback = function(Value)
+		jumpPowerEnabled = Value
+		local hum = getHumanoid(LocalPlayer.Character)
+		if hum and not Value then
+			hum.UseJumpPower = true
+			hum.JumpPower = 50
+		end
+	end,
+})
+
+CharTab:CreateSlider({
+	Name = "Jump Power",
+	Range = {50, 300},
+	Increment = 5,
+	Suffix = " JP",
+	CurrentValue = 50,
+	Flag = "JumpPowerSlider",
+	Callback = function(Value)
+		targetJumpPower = Value
+	end,
+})
+
+CharTab:CreateSection("Prink")
+
+CharTab:CreateToggle({
+	Name = "Bật Prink",
+	CurrentValue = false,
+	Flag = "PrinkToggle",
+	Callback = function(Value)
+		prinkEnabled = Value
+		local hum = getHumanoid(LocalPlayer.Character)
+		if hum and not Value then
+			hum.Sit = false
+			hum.PlatformStand = false
+		end
+	end,
+})
+
+task.spawn(function()
+	local flip = false
+	while true do
+		local char = LocalPlayer.Character
+		local hum = getHumanoid(char)
+		if hum and hum.Health > 0 then
+			if walkSpeedEnabled then
+				hum.WalkSpeed = targetWalkSpeed
+			end
+			if jumpPowerEnabled then
+				hum.UseJumpPower = true
+				hum.JumpPower = targetJumpPower
+			end
+			if prinkEnabled then
+				flip = not flip
+				hum.Jump = true
+				hum.Sit = flip
+			end
+		end
+		task.wait(prinkEnabled and 0.35 or 0.1)
+	end
+end)
+
+-- ==================== TAB BAY V4 & NOCLIP V4 ====================
+local MoveTab = Window:CreateTab("Bay V4 & Noclip V4", 4483362458)
+MoveTab:CreateSection("Noclip V4")
+
+local function setCharacterCollision(char, canCollide)
+	if not char then
+		return
+	end
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			if not canCollide then
+				if savedCollisions[part] == nil then
+					savedCollisions[part] = part.CanCollide
+				end
+				part.CanCollide = false
+			else
+				if savedCollisions[part] ~= nil then
+					part.CanCollide = savedCollisions[part]
+				elseif part.Name ~= "HumanoidRootPart" then
+					part.CanCollide = true
+				end
+			end
+		end
+	end
+end
+
+RunService.Stepped:Connect(function()
+	if noclipEnabled and LocalPlayer.Character then
+		setCharacterCollision(LocalPlayer.Character, false)
+	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	table.clear(savedCollisions)
+	if noclipEnabled then
+		task.wait(0.2)
+		setCharacterCollision(char, false)
+	end
+end)
+
+MoveTab:CreateToggle({
+	Name = "Bật/Tắt Noclip V4",
+	CurrentValue = false,
+	Flag = "NoclipV4Toggle",
+	Callback = function(Value)
+		noclipEnabled = Value
+		if LocalPlayer.Character then
+			setCharacterCollision(LocalPlayer.Character, not Value)
+		end
+		if not Value then
+			table.clear(savedCollisions)
+		end
+	end,
+})
+
+MoveTab:CreateSection("Bay V4")
+
+local function stopFlyV4()
+	flyEnabled = false
+	if flyBodyGyro then
+		flyBodyGyro:Destroy()
+		flyBodyGyro = nil
+	end
+	if flyBodyVelocity then
+		flyBodyVelocity:Destroy()
+		flyBodyVelocity = nil
+	end
+	local char = LocalPlayer.Character
+	local hum = getHumanoid(char)
+	if hum then
+		hum:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, true)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
+		hum.PlatformStand = false
+		hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+	end
+	if char and char:FindFirstChild("Animate") then
+		char.Animate.Disabled = false
+	end
+end
+
+local function startFlyV4()
+	stopFlyV4()
+	local char = LocalPlayer.Character
+	local hum = getHumanoid(char)
+	if not char or not hum then
+		return
+	end
+
+	local anchorPart
+	if hum.RigType == Enum.HumanoidRigType.R6 then
+		anchorPart = char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
+	else
+		anchorPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
+	end
+	if not anchorPart then
+		return
+	end
+
+	flyEnabled = true
+
+	if char:FindFirstChild("Animate") then
+		char.Animate.Disabled = true
+		for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+			track:AdjustSpeed(0)
+		end
+	end
+
+	hum:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Running, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
+	hum:ChangeState(Enum.HumanoidStateType.Swimming)
+	hum.PlatformStand = true
+
+	flyBodyGyro = Instance.new("BodyGyro")
+	flyBodyGyro.P = 9e4
+	flyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+	flyBodyGyro.CFrame = anchorPart.CFrame
+	flyBodyGyro.Parent = anchorPart
+
+	flyBodyVelocity = Instance.new("BodyVelocity")
+	flyBodyVelocity.Velocity = Vector3.new(0, 0.1, 0)
+	flyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	flyBodyVelocity.Parent = anchorPart
+
+	task.spawn(function()
+		local currentSpeed = 0
+		while flyEnabled and flyBodyGyro and flyBodyVelocity and anchorPart.Parent do
+			local cam = workspace.CurrentCamera
+			local moveDir = hum.MoveDirection
+			if moveDir.Magnitude > 0 then
+				currentSpeed = math.min(flySpeed, currentSpeed + (flySpeed * 0.05) + 1)
+				flyBodyVelocity.Velocity = moveDir.Unit * currentSpeed
+			else
+				currentSpeed = math.max(0, currentSpeed - 2)
+				flyBodyVelocity.Velocity = Vector3.zero
+			end
+			flyBodyGyro.CFrame = cam.CFrame
+			RunService.RenderStepped:Wait()
+		end
+	end)
+end
+
+MoveTab:CreateToggle({
+	Name = "Bật/Tắt Bay V4",
+	CurrentValue = false,
+	Flag = "FlyV4Toggle",
+	Callback = function(Value)
+		if Value then
+			startFlyV4()
+		else
+			stopFlyV4()
+		end
+	end,
+})
+
+MoveTab:CreateSlider({
+	Name = "Tốc Độ Bay V4",
+	Range = {10, 250},
+	Increment = 5,
+	Suffix = " Speed",
+	CurrentValue = 50,
+	Flag = "FlyV4Speed",
+	Callback = function(Value)
+		flySpeed = Value
+	end,
+})
+-- ==================== TAB AIMBOT ====================
+local AimTab = Window:CreateTab("Aimbot", 4483362458)
+AimTab:CreateSection("Bộ Phận & Độ Mượt")
+
+AimTab:CreateToggle({
+	Name = "Bật/Tắt Aimbot",
+	CurrentValue = false,
+	Flag = "AimbotToggle",
+	Callback = function(Value)
+		aimbotEnabled = Value
+	end,
+})
+
+AimTab:CreateDropdown({
+	Name = "Chọn Bộ Phận Aim",
+	Options = {"Head", "HumanoidRootPart", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"},
+	CurrentOption = {"Head"},
+	MultipleOptions = false,
+	Flag = "AimPartDropdown",
+	Callback = function(Option)
+		aimPartChoice = type(Option) == "table" and Option[1] or Option
+	end,
+})
+
+AimTab:CreateSlider({
+	Name = "Độ Mượt Aimbot",
+	Range = {5, 100},
+	Increment = 5,
+	Suffix = "%",
+	CurrentValue = 25,
+	Flag = "AimSmoothSlider",
+	Callback = function(Value)
+		aimSmoothness = Value / 100
+	end,
+})
+
+AimTab:CreateSection("FOV, Wall Check & Team Check")
+
+AimTab:CreateToggle({
+	Name = "Aim Trong Vùng FOV",
+	CurrentValue = true,
+	Flag = "FovToggle",
+	Callback = function(Value)
+		fovEnabled = Value
+	end,
+})
+
+AimTab:CreateSlider({
+	Name = "Bán Kính FOV",
+	Range = {30, 450},
+	Increment = 5,
+	Suffix = " px",
+	CurrentValue = 120,
+	Flag = "FovRadiusSlider",
+	Callback = function(Value)
+		fovRadius = Value
+	end,
+})
+
+AimTab:CreateToggle({
+	Name = "Wall Check",
+	CurrentValue = true,
+	Flag = "WallCheckToggle",
+	Callback = function(Value)
+		wallCheckEnabled = Value
+	end,
+})
+
+AimTab:CreateToggle({
+	Name = "Team Check",
+	CurrentValue = true,
+	Flag = "TeamCheckToggle",
+	Callback = function(Value)
+		teamCheckEnabled = Value
+	end,
+})
+
+local fovCircle = nil
+local hasDrawing = pcall(function()
+	fovCircle = Drawing.new("Circle")
+	fovCircle.Thickness = 2
+	fovCircle.NumSides = 64
+	fovCircle.Filled = false
+	fovCircle.Transparency = 0.85
+	fovCircle.Visible = false
+end)
+
+local function getClosestTargetInFOV()
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return nil
+	end
+
+	local viewportSize = cam.ViewportSize
+	local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+	local closestPart = nil
+	local bestDistance = math.huge
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local skipTeam = teamCheckEnabled and isTeammate(plr)
+			if not skipTeam then
+				local char = plr.Character
+				local hum = getHumanoid(char)
+				if char and hum and hum.Health > 0 then
+					local targetPart = resolveAimPart(char, aimPartChoice)
+					if targetPart then
+						local screenPos, onScreen = cam:WorldToViewportPoint(targetPart.Position)
+						if onScreen and screenPos.Z > 0 then
+							local screenPoint = Vector2.new(screenPos.X, screenPos.Y)
+							local distFromCenter = (screenPoint - center).Magnitude
+							local withinFov = (not fovEnabled) or (distFromCenter <= fovRadius)
+
+							if withinFov and distFromCenter < bestDistance and isVisible(targetPart) then
+								bestDistance = distFromCenter
+								closestPart = targetPart
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return closestPart
+end
+
+-- ==================== TAB ESP CẦU VỒNG ====================
+local EspTab = Window:CreateTab("ESP", 4483362458)
+EspTab:CreateSection("ESP Cầu Vồng & Team")
+
+local function clearESP()
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character then
+			local hl = plr.Character:FindFirstChild("TuanRainbowESP")
+			if hl then
+				hl:Destroy()
+			end
+		end
+	end
+end
+
+EspTab:CreateToggle({
+	Name = "Bật/Tắt ESP Cầu Vồng",
+	CurrentValue = false,
+	Flag = "EspToggle",
+	Callback = function(Value)
+		espEnabled = Value
+		if not Value then
+			clearESP()
+		end
+	end,
+})
+
+EspTab:CreateToggle({
+	Name = "Chỉ Hiện Kẻ Địch",
+	CurrentValue = false,
+	Flag = "EnemyOnlyToggle",
+	Callback = function(Value)
+		enemyOnly = Value
+	end,
+})
+
+-- ==================== VÒNG LẶP RENDER CHÍNH ====================
+RunService.RenderStepped:Connect(function()
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return
+	end
+
+	if hasDrawing and fovCircle then
+		local vp = cam.ViewportSize
+		fovCircle.Position = Vector2.new(vp.X / 2, vp.Y / 2)
+		fovCircle.Radius = fovRadius
+		fovCircle.Color = rainbowColor
+		fovCircle.Visible = (aimbotEnabled and fovEnabled)
+	end
+
+	if aimbotEnabled then
+		local targetPart = getClosestTargetInFOV()
+		if targetPart then
+			local targetCFrame = CFrame.new(cam.CFrame.Position, targetPart.Position)
+			cam.CFrame = cam.CFrame:Lerp(targetCFrame, math.clamp(aimSmoothness, 0.05, 1))
+		end
+	end
+
+	if espEnabled then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LocalPlayer and plr.Character then
+				local teammate = isTeammate(plr)
+				if enemyOnly and teammate then
+					local oldHl = plr.Character:FindFirstChild("TuanRainbowESP")
+					if oldHl then
+						oldHl:Destroy()
+					end
+				else
+					local hl = plr.Character:FindFirstChild("TuanRainbowESP")
+					if not hl then
+						hl = Instance.new("Highlight")
+						hl.Name = "TuanRainbowESP"
+						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+						hl.FillTransparency = 0.5
+						hl.OutlineTransparency = 0
+						hl.Parent = plr.Character
+					end
+					hl.Adornee = plr.Character
+					local col = teammate and friendColor or rainbowColor
+					hl.FillColor = col
+					hl.OutlineColor = col
+				end
+			end
+		end
+	end
+end)
+
+Rayfield:Notify({
+	Title = "TUÂN RAYFIELD V4",
+	Content = "BY THIỆT - Đã tải thành công!",
+	Duration = 4,
+	Image = 4483362458,
+})
